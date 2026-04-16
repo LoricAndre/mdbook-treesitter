@@ -1,8 +1,8 @@
 //! Query execution: runs either a tree-sitter S-expression query or a jq
 //! filter against a source file and returns the matching code text.
 
-use anyhow::{bail, Context, Result};
-use serde_json::{json, Value};
+use anyhow::{Context, Result, bail};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use streaming_iterator::StreamingIterator;
 use tree_sitter::{Language, Node, Parser, Query, QueryCursor};
@@ -191,7 +191,7 @@ pub fn run_jq_query(
 /// and returns all outputs joined by newlines.
 fn run_jq_on_value(filter_str: &str, input: Value) -> Result<String> {
     use jaq_core::load::{Arena, File, Loader};
-    use jaq_core::{data::JustLut, val::unwrap_valr, Compiler, Ctx, Vars};
+    use jaq_core::{Compiler, Ctx, Vars, data::JustLut, val::unwrap_valr};
     use jaq_json::Val;
 
     type D = JustLut<Val>;

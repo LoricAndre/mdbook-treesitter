@@ -2,8 +2,8 @@ use std::io;
 use std::process;
 
 use clap::{Arg, Command};
-use mdbook_preprocessor::errors::Result;
 use mdbook_preprocessor::Preprocessor;
+use mdbook_preprocessor::errors::Result;
 use mdbook_treesitter::TreesitterPreprocessor;
 
 fn make_app() -> Command {

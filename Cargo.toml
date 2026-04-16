@@ -1,8 +1,16 @@
 [package]
-name = "mdbook-treesitter"
+name = "mdbook-ts"
 version = "0.1.0"
 edition = "2024"
-description = "An mdBook preprocessor that uses tree-sitter to extract code from files"
+rust-version = "1.85"
+description = "An mdBook preprocessor that uses tree-sitter to extract code snippets from source files"
+license = "MIT"
+repository = "https://github.com/LoricAndre/mdbook-treesitter"
+homepage = "https://github.com/LoricAndre/mdbook-treesitter"
+documentation = "https://docs.rs/mdbook-ts"
+readme = "README.md"
+keywords = ["mdbook", "treesitter", "preprocessor", "documentation", "code"]
+categories = ["development-tools", "text-processing"]
 
 [[bin]]
 name = "mdbook-treesitter"

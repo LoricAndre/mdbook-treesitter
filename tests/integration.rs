@@ -7,10 +7,10 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use mdbook_treesitter::{
+    Directive,
     language::build_registry,
     process_chapter,
     query::{apply_strip, run_jq_query, run_treesitter_query},
-    Directive,
 };
 
 // ─── Source fixture ───────────────────────────────────────────────────────────

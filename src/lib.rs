@@ -155,8 +155,7 @@ impl Preprocessor for TreesitterPreprocessor {
             return Err(anyhow::anyhow!(
                 "mdbook-treesitter encountered errors:\n{}",
                 errors.join("\n")
-            )
-            .into());
+            ));
         }
 
         Ok(book)

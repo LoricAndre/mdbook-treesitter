@@ -4,7 +4,7 @@
 //! under `[preprocessor.treesitter.<lang>.queries]` so they can be edited
 //! without recompiling or reinstalling the preprocessor binary.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::collections::HashMap;
 use tree_sitter::{Language, Parser};
 

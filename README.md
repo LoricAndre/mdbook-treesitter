@@ -1,36 +1,68 @@
-# mdBook treesitter
+# mdbook-treesitter
 
-This is an mdBook preprocessor that uses tree-sitter to extract code from source files.
+[![Crates.io](https://img.shields.io/crates/v/mdbook-ts)](https://crates.io/crates/mdbook-ts)
+[![docs.rs](https://img.shields.io/docsrs/mdbook-treesitter)](https://docs.rs/mdbook-treesitter)
+[![CI](https://github.com/LoricAndre/mdbook-treesitter/actions/workflows/ci.yml/badge.svg)](https://github.com/LoricAndre/mdbook-treesitter/actions/workflows/ci.yml)
+[![License](https://img.shields.io/crates/l/mdbook-ts)](LICENSE)
 
-## Usage
+An [mdBook](https://rust-lang.github.io/mdBook/) preprocessor that uses
+[tree-sitter](https://tree-sitter.github.io) to extract code snippets directly
+from source files and embed them in your book.
 
-Install `mdbook-treesitter` then add this to your `book.toml`:
+Directives in your Markdown are replaced with the text extracted by the named
+query — wrap them in a fenced code block to get syntax highlighting:
+
+````markdown
+```rust
+{{ #treesitter src/lib.rs#doc_comment?name=MyStruct }}
+```
+````
+
+## Installation
+
+```sh
+cargo install mdbook-ts
+```
+
+Then add the preprocessor to your `book.toml`:
 
 ```toml
 [preprocessor.treesitter]
 ```
 
+### Development
+
+To iterate on queries without reinstalling, point `command` at `cargo run`:
+
+```toml
+[preprocessor.treesitter]
+command = "cargo run --manifest-path /path/to/mdbook-treesitter/Cargo.toml --"
+```
+
 ## Language support
 
-Out of the box, this supports Rust, TOML & Markdown.
+Rust, TOML, and Markdown parsers are bundled out of the box.
 
-You can add more parsers by configuring the preprocessor in `book.toml`:
+Additional parsers can be loaded from a shared library:
 
 ```toml
 [preprocessor.treesitter.python]
-parser = "/path/to/parser.so"  # absolute or relative to book.toml
+parser = "/path/to/tree-sitter-python.so"  # absolute or relative to book.toml
 ```
 
-## Adding queries
+## Defining queries
 
-Queries are defined in `book.toml` — no recompile needed when you change them.
+Queries live entirely in `book.toml` — no recompile needed when you change them.
 
 ### Tree-sitter queries
 
+A plain string is treated as a tree-sitter S-expression query. Captures whose
+names match directive parameters are used as filters; the remaining captures are
+the output.
+
 ```toml
 [preprocessor.treesitter.rust.queries]
-# Captures the last run of doc-comment lines immediately before a struct.
-# Handles 0 or 1 intervening attribute items (e.g. #[derive(...)]).
+# Captures doc-comment lines immediately before a struct (0 or 1 #[derive(…)]).
 doc_comment = """
 [
   ((line_comment)+ @doc_comment
@@ -43,24 +75,51 @@ doc_comment = """
    (struct_item name: (type_identifier) @name))
 ]"""
 
-# Captures the full struct declaration (name + body).
+# Full struct declaration.
 struct = "(struct_item name: (type_identifier) @name) @struct"
+
+# Individual field declarations — no surrounding `pub struct Name { }`.
+struct_fields = """
+(struct_item
+  name: (type_identifier) @name
+  body: (field_declaration_list
+    (field_declaration) @field))
+"""
+```
+
+### Strip regex
+
+Add `strip` to remove a regex pattern from every output line — useful for
+stripping comment delimiters to get plain prose:
+
+```toml
+[preprocessor.treesitter.rust.queries.comment_text]
+query = """
+[
+  ((line_comment)+ @doc_comment
+   .
+   (struct_item name: (type_identifier) @name))
+  ((line_comment)+ @doc_comment
+   .
+   (attribute_item)
+   .
+   (struct_item name: (type_identifier) @name))
+]"""
+strip = "^///? ?"
 ```
 
 ### jq queries
 
-For more complex extractions, use a jq filter applied to the tree-sitter AST
+For complex extractions, write a jq filter applied to the tree-sitter AST
 serialised as JSON. The filter receives:
 
 ```json
-{ "params": { "name": "Foo", ... }, "source": "...", "children": [...] }
+{ "params": { "name": "Foo", … }, "source": "…", "children": […] }
 ```
 
 ```toml
 [preprocessor.treesitter.rust.queries.doc_comment_jq]
 format = "jq"
-# Extracts the last contiguous block of doc-comment lines before the named
-# struct, skipping any attribute items between the comments and the struct.
 query = """
 .params.name as $target_name |
 .children as $all |
@@ -82,26 +141,20 @@ end
 """
 ```
 
-## Referencing code
-
-Add a preprocessor directive to your markdown:
-
-```markdown
-## Foo
-
-{{ #treesitter ../../foo.rs#doc_comment?name=Foo }}
-```
-
-Note: the space around the braces is optional.
-
-### Directive syntax
+## Directive syntax
 
 ```
-{{ #treesitter <path>[#<query>][?<param>=<value>[&...]] }}
+{{ #treesitter <path>[#<query>][?<param>=<value>[&…]] }}
 ```
 
 | Part | Description |
 |------|-------------|
-| `<path>` | Path to the source file, relative to the chapter's source directory |
-| `#<query>` | Named query defined in `book.toml`. Omit to embed the whole file. |
-| `?<param>=<value>` | Query parameters passed to the query (e.g. `?name=MyStruct`) |
+| `<path>` | Path to the source file, relative to the chapter's directory |
+| `#<query>` | Named query from `book.toml`. Omit to embed the whole file. |
+| `?<param>=<value>` | Parameters forwarded to the query (e.g. `?name=MyStruct`) |
+
+Prefix the directive with `\` to emit it literally without expansion:
+
+```markdown
+\{{ #treesitter src/lib.rs#doc_comment?name=Foo }}
+```
