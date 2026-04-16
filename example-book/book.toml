@@ -1,0 +1,76 @@
+[book]
+title = "mdbook-treesitter Example"
+authors = ["Example"]
+language = "en"
+src = "src"
+
+[preprocessor.treesitter]
+command = "cargo run --manifest-path ../Cargo.toml --"
+
+[preprocessor.treesitter.rust.queries]
+# Captures the last run of doc-comment lines immediately before a struct.
+# Handles 0 or 1 intervening attribute items (e.g. #[derive(...)]).
+doc_comment = """
+[
+  ((line_comment)+ @doc_comment
+   .
+   (struct_item name: (type_identifier) @name))
+  ((line_comment)+ @doc_comment
+   .
+   (attribute_item)
+   .
+   (struct_item name: (type_identifier) @name))
+]"""
+
+# Captures the full struct declaration (name + body, no attributes/comments).
+struct = "(struct_item name: (type_identifier) @name) @struct"
+
+[preprocessor.treesitter.rust.queries.doc_comment_jq]
+format = "jq"
+# jq alternative to doc_comment: extracts the last contiguous block of
+# doc-comment lines before the named struct, skipping attribute items.
+query = """
+.params.name as $target_name |
+.children as $all |
+([$all | to_entries[] |
+  select(
+    .value.type == "struct_item" and
+    (.value.children[]? | select(.type == "type_identifier") | .text) == $target_name
+  )
+] | .[0].key) as $idx |
+if $idx == null then error("struct not found")
+else
+  ([$all[0:$idx] | to_entries[] |
+    select(.value.type != "line_comment" and .value.type != "attribute_item")
+  ] | if length > 0 then last.key else -1 end) as $last_gap |
+  [$all[($last_gap+1):$idx][] |
+    select(.type == "line_comment") | .text | rtrimstr("\\n")] |
+  join("\\n")
+end
+"""
+
+[preprocessor.treesitter.rust.queries.comment_text]
+# Same as doc_comment but strips the leading `/// ` or `//` delimiters,
+# yielding plain prose text.
+query = """
+[
+  ((line_comment)+ @doc_comment
+   .
+   (struct_item name: (type_identifier) @name))
+  ((line_comment)+ @doc_comment
+   .
+   (attribute_item)
+   .
+   (struct_item name: (type_identifier) @name))
+]"""
+strip = "^///? ?"
+
+[preprocessor.treesitter.rust.queries.struct_fields]
+# Captures each field declaration inside a struct body individually,
+# without the surrounding `pub struct Name { ... }` scaffolding.
+query = """
+(struct_item
+  name: (type_identifier) @name
+  body: (field_declaration_list
+    (field_declaration) @field))
+"""

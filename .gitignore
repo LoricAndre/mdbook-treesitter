@@ -1,0 +1,9 @@
+/.direnv
+/.direnv/bin
+
+
+# Added by cargo
+
+/target
+
+book/
