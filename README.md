@@ -20,8 +20,38 @@ query — wrap them in a fenced code block to get syntax highlighting:
 
 ## Installation
 
+### cargo
+
 ```sh
 cargo install mdbook-ts
+```
+
+### Nix flakes
+
+Add this repository as a flake input and include the package in your dev shell:
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    mdbook-ts.url = "github:LoricAndre/mdbook-treesitter";
+  };
+
+  outputs = { nixpkgs, mdbook-ts, ... }: let
+    system = "x86_64-linux";
+    pkgs = nixpkgs.legacyPackages.${system};
+  in {
+    devShells.${system}.default = pkgs.mkShell {
+      packages = [ pkgs.mdbook mdbook-ts.packages.${system}.default ];
+    };
+  };
+}
+```
+
+Alternatively, use the provided overlay to make `pkgs.mdbook-treesitter` available:
+
+```nix
+nixpkgs.overlays = [ mdbook-ts.overlays.default ];
 ```
 
 Then add the preprocessor to your `book.toml`:
