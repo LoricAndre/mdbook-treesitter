@@ -33,6 +33,21 @@ use crate::config::{QueryConfig, QueryFormat};
 ///
 /// → returns the text of the `@struct` capture for every `struct_item` whose
 ///   `@name` equals `"Foo"`.
+/// Substitutes `{capture_name}` placeholders in `tmpl`, joining multiple
+/// nodes captured under the same name with `\n` and optionally stripping each.
+fn render_row(row: &HashMap<String, Vec<String>>, tmpl: &str, strip: Option<&str>) -> Result<String> {
+    let mut line = tmpl.to_string();
+    for (name, texts) in row {
+        let joined = texts.join("\n");
+        let value = match strip {
+            Some(pat) => apply_strip(&joined, pat)?,
+            None => joined,
+        };
+        line = line.replace(&format!("{{{name}}}"), &value);
+    }
+    Ok(line)
+}
+
 pub fn run_treesitter_query(
     language: &Language,
     source: &str,
@@ -98,28 +113,47 @@ pub fn run_treesitter_query(
         }
 
         if let Some(tmpl) = template {
-            // Template mode: group all output captures by name, apply strip
-            // per-capture, then substitute {capture_name} placeholders.
-            let mut groups: HashMap<String, Vec<String>> = HashMap::new();
+            // Template mode: walk output captures in source order and group
+            // them into rows.  A new row begins when a capture name that is
+            // already present in the current row reappears AND every expected
+            // output capture name has been seen at least once.  This handles
+            // two cases transparently:
+            //
+            // • One tree-sitter match per item (flat pattern): no repeated
+            //   names within a match, so the whole match is one row.
+            // • One tree-sitter match for the whole parent (e.g. an enum_item
+            //   wrapper): all child captures are bundled into a single match,
+            //   and row boundaries are detected via repetition.
+            let output_names: std::collections::HashSet<String> = capture_names
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| output_indices.contains(&(*i as u32)))
+                .map(|(_, &n)| n.to_string())
+                .collect();
+
+            let mut row: HashMap<String, Vec<String>> = HashMap::new();
+
             for c in m.captures {
-                if output_indices.contains(&c.index) {
-                    let name = capture_names[c.index as usize].to_string();
-                    groups
-                        .entry(name)
-                        .or_default()
-                        .push(node_text(c.node, source).trim_end().to_string());
+                if !output_indices.contains(&c.index) {
+                    continue;
                 }
+                let name = capture_names[c.index as usize].to_string();
+                let text = node_text(c.node, source).trim_end().to_string();
+
+                // Flush when a repeated name signals the start of the next row,
+                // but only once every expected output name has been seen (so that
+                // multi-node captures like `(line_comment)+` don't flush early).
+                if row.contains_key(&name) && output_names.iter().all(|n| row.contains_key(n)) {
+                    results.push(render_row(&row, tmpl, strip)?);
+                    row.clear();
+                }
+
+                row.entry(name).or_default().push(text);
             }
-            let mut line = tmpl.to_string();
-            for (name, texts) in &groups {
-                let joined = texts.join("\n");
-                let value = match strip {
-                    Some(pat) => apply_strip(&joined, pat)?,
-                    None => joined,
-                };
-                line = line.replace(&format!("{{{name}}}"), &value);
+
+            if !row.is_empty() {
+                results.push(render_row(&row, tmpl, strip)?);
             }
-            results.push(line);
         } else {
             // Plain mode: collect output captures as flat text segments.
             for c in m.captures {
