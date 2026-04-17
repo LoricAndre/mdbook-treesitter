@@ -38,6 +38,8 @@ pub fn run_treesitter_query(
     source: &str,
     query_str: &str,
     params: &HashMap<String, String>,
+    strip: Option<&str>,
+    template: Option<&str>,
 ) -> Result<String> {
     let mut parser = Parser::new();
     parser.set_language(language).context("set language")?;
@@ -95,12 +97,37 @@ pub fn run_treesitter_query(
             }
         }
 
-        // Collect output captures.
-        for c in m.captures {
-            if output_indices.contains(&c.index) {
-                // Trim trailing whitespace so that line_comment nodes
-                // (which include their trailing '\n') join cleanly.
-                results.push(node_text(c.node, source).trim_end().to_string());
+        if let Some(tmpl) = template {
+            // Template mode: group all output captures by name, apply strip
+            // per-capture, then substitute {capture_name} placeholders.
+            let mut groups: HashMap<String, Vec<String>> = HashMap::new();
+            for c in m.captures {
+                if output_indices.contains(&c.index) {
+                    let name = capture_names[c.index as usize].to_string();
+                    groups
+                        .entry(name)
+                        .or_default()
+                        .push(node_text(c.node, source).trim_end().to_string());
+                }
+            }
+            let mut line = tmpl.to_string();
+            for (name, texts) in &groups {
+                let joined = texts.join("\n");
+                let value = match strip {
+                    Some(pat) => apply_strip(&joined, pat)?,
+                    None => joined,
+                };
+                line = line.replace(&format!("{{{name}}}"), &value);
+            }
+            results.push(line);
+        } else {
+            // Plain mode: collect output captures as flat text segments.
+            for c in m.captures {
+                if output_indices.contains(&c.index) {
+                    // Trim trailing whitespace so that line_comment nodes
+                    // (which include their trailing '\n') join cleanly.
+                    results.push(node_text(c.node, source).trim_end().to_string());
+                }
             }
         }
     }
@@ -270,16 +297,35 @@ pub fn run_query(
     query_cfg: &QueryConfig,
     params: &HashMap<String, String>,
 ) -> Result<String> {
-    let raw = match query_cfg.format() {
+    match query_cfg.format() {
         QueryFormat::TreeSitter => {
-            run_treesitter_query(language, source, query_cfg.query_str(), params)?
+            // strip and template are both forwarded; when a template is active,
+            // strip is applied per-capture inside run_treesitter_query, so we
+            // must not apply it again here.
+            let raw = run_treesitter_query(
+                language,
+                source,
+                query_cfg.query_str(),
+                params,
+                query_cfg.strip(),
+                query_cfg.template(),
+            )?;
+            if query_cfg.template().is_some() {
+                Ok(raw)
+            } else {
+                match query_cfg.strip() {
+                    None => Ok(raw),
+                    Some(pattern) => apply_strip(&raw, pattern),
+                }
+            }
         }
-        QueryFormat::Jq => run_jq_query(language, source, query_cfg.query_str(), params)?,
-    };
-
-    match query_cfg.strip() {
-        None => Ok(raw),
-        Some(pattern) => apply_strip(&raw, pattern),
+        QueryFormat::Jq => {
+            let raw = run_jq_query(language, source, query_cfg.query_str(), params)?;
+            match query_cfg.strip() {
+                None => Ok(raw),
+                Some(pattern) => apply_strip(&raw, pattern),
+            }
+        }
     }
 }
 

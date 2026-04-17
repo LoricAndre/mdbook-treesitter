@@ -76,6 +76,21 @@ pub enum QueryConfig {
         /// Regex whose matches are deleted from each output line.
         #[serde(default)]
         strip: Option<String>,
+        /// Output template applied once per query match.
+        ///
+        /// Use `{capture_name}` placeholders to interpolate captured text.
+        /// When multiple nodes are captured under the same name (e.g. `(line_comment)+`),
+        /// they are joined with `\n` before substitution.  The `strip` regex,
+        /// if present, is applied to each capture's text before substitution.
+        ///
+        /// ```toml
+        /// [preprocessor.treesitter.rust.queries.enum_variants]
+        /// query = "((line_comment)+ @doc_comment . (enum_variant name: (identifier) @name))"
+        /// strip = "^///? ?"
+        /// template = "- {name}: {doc_comment}"
+        /// ```
+        #[serde(default)]
+        template: Option<String>,
     },
 }
 
@@ -110,6 +125,14 @@ impl QueryConfig {
         match self {
             QueryConfig::TreeSitter(_) => None,
             QueryConfig::Structured { strip, .. } => strip.as_deref(),
+        }
+    }
+
+    /// Returns the output template, if any.
+    pub fn template(&self) -> Option<&str> {
+        match self {
+            QueryConfig::TreeSitter(_) => None,
+            QueryConfig::Structured { template, .. } => template.as_deref(),
         }
     }
 }

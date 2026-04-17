@@ -139,7 +139,15 @@ fn rust_language() -> tree_sitter::Language {
 fn ts_doc_comment_point() {
     let mut params = HashMap::new();
     params.insert("name".into(), "Point".into());
-    let result = run_treesitter_query(&rust_language(), GEOMETRY_RS, DOC_COMMENT, &params).unwrap();
+    let result = run_treesitter_query(
+        &rust_language(),
+        GEOMETRY_RS,
+        DOC_COMMENT,
+        &params,
+        None,
+        None,
+    )
+    .unwrap();
     assert!(
         result.contains("A simple point in 2D space."),
         "got: {result}"
@@ -158,7 +166,15 @@ fn ts_doc_comment_point() {
 fn ts_doc_comment_rectangle() {
     let mut params = HashMap::new();
     params.insert("name".into(), "Rectangle".into());
-    let result = run_treesitter_query(&rust_language(), GEOMETRY_RS, DOC_COMMENT, &params).unwrap();
+    let result = run_treesitter_query(
+        &rust_language(),
+        GEOMETRY_RS,
+        DOC_COMMENT,
+        &params,
+        None,
+        None,
+    )
+    .unwrap();
     assert!(result.contains("A rectangle defined"), "got: {result}");
     assert!(!result.contains("Point"), "got: {result}");
     assert!(
@@ -171,8 +187,15 @@ fn ts_doc_comment_rectangle() {
 fn ts_doc_comment_no_match_returns_error() {
     let mut params = HashMap::new();
     params.insert("name".into(), "NonExistent".into());
-    let err =
-        run_treesitter_query(&rust_language(), GEOMETRY_RS, DOC_COMMENT, &params).unwrap_err();
+    let err = run_treesitter_query(
+        &rust_language(),
+        GEOMETRY_RS,
+        DOC_COMMENT,
+        &params,
+        None,
+        None,
+    )
+    .unwrap_err();
     assert!(err.to_string().contains("no results"), "got: {err}");
 }
 
@@ -182,7 +205,8 @@ fn ts_doc_comment_no_match_returns_error() {
 fn ts_struct_rectangle_includes_body() {
     let mut params = HashMap::new();
     params.insert("name".into(), "Rectangle".into());
-    let result = run_treesitter_query(&rust_language(), GEOMETRY_RS, STRUCT, &params).unwrap();
+    let result =
+        run_treesitter_query(&rust_language(), GEOMETRY_RS, STRUCT, &params, None, None).unwrap();
     assert!(result.contains("Rectangle"), "got: {result}");
     assert!(result.contains("width"), "got: {result}");
 }
@@ -191,7 +215,8 @@ fn ts_struct_rectangle_includes_body() {
 fn ts_struct_point() {
     let mut params = HashMap::new();
     params.insert("name".into(), "Point".into());
-    let result = run_treesitter_query(&rust_language(), GEOMETRY_RS, STRUCT, &params).unwrap();
+    let result =
+        run_treesitter_query(&rust_language(), GEOMETRY_RS, STRUCT, &params, None, None).unwrap();
     assert!(result.contains("pub struct Point"), "got: {result}");
     assert!(result.contains("pub x: f64"), "got: {result}");
 }
@@ -353,7 +378,15 @@ fn ts_comment_text_point_no_delimiters() {
     let mut params = HashMap::new();
     params.insert("name".into(), "Point".into());
     // Run raw query then apply strip — mirrors what run_query does with a config.
-    let raw = run_treesitter_query(&rust_language(), GEOMETRY_RS, DOC_COMMENT, &params).unwrap();
+    let raw = run_treesitter_query(
+        &rust_language(),
+        GEOMETRY_RS,
+        DOC_COMMENT,
+        &params,
+        None,
+        None,
+    )
+    .unwrap();
     let result = apply_strip(&raw, COMMENT_STRIP).unwrap();
     assert!(
         result.contains("A simple point in 2D space."),
@@ -363,14 +396,67 @@ fn ts_comment_text_point_no_delimiters() {
     assert!(!result.contains("///"), "delimiters not stripped: {result}");
 }
 
+// ─── template rendering ───────────────────────────────────────────────────────
+
+const COLOR_RS: &str = r#"
+/// The primary colors.
+pub enum Color {
+    /// The color red.
+    Red,
+    /// The color green.
+    Green,
+    /// The color blue.
+    Blue,
+}
+"#;
+
+const ENUM_VARIANT_DOC: &str = r#"[
+  ((line_comment)+ @doc_comment
+   .
+   (enum_variant name: (identifier) @name))
+  ((line_comment)+ @doc_comment
+   .
+   (attribute_item)+
+   .
+   (enum_variant name: (identifier) @name))
+]"#;
+
+#[test]
+fn ts_template_enum_variant_list() {
+    let result = run_treesitter_query(
+        &rust_language(),
+        COLOR_RS,
+        ENUM_VARIANT_DOC,
+        &HashMap::new(),
+        Some(r"^///? ?"),
+        Some("- {name}: {doc_comment}"),
+    )
+    .unwrap();
+    assert!(result.contains("- Red: The color red."), "got: {result}");
+    assert!(
+        result.contains("- Green: The color green."),
+        "got: {result}"
+    );
+    assert!(result.contains("- Blue: The color blue."), "got: {result}");
+    // Each entry on its own line.
+    assert_eq!(result.lines().count(), 3, "got: {result}");
+}
+
 // ─── struct_fields capture ────────────────────────────────────────────────────
 
 #[test]
 fn ts_struct_fields_point() {
     let mut params = HashMap::new();
     params.insert("name".into(), "Point".into());
-    let result =
-        run_treesitter_query(&rust_language(), GEOMETRY_RS, STRUCT_FIELDS, &params).unwrap();
+    let result = run_treesitter_query(
+        &rust_language(),
+        GEOMETRY_RS,
+        STRUCT_FIELDS,
+        &params,
+        None,
+        None,
+    )
+    .unwrap();
     // Individual fields, no surrounding struct scaffolding.
     assert!(result.contains("pub x: f64"), "got: {result}");
     assert!(result.contains("pub y: f64"), "got: {result}");
@@ -385,8 +471,15 @@ fn ts_struct_fields_point() {
 fn ts_struct_fields_rectangle() {
     let mut params = HashMap::new();
     params.insert("name".into(), "Rectangle".into());
-    let result =
-        run_treesitter_query(&rust_language(), GEOMETRY_RS, STRUCT_FIELDS, &params).unwrap();
+    let result = run_treesitter_query(
+        &rust_language(),
+        GEOMETRY_RS,
+        STRUCT_FIELDS,
+        &params,
+        None,
+        None,
+    )
+    .unwrap();
     assert!(result.contains("pub origin: Point"), "got: {result}");
     assert!(result.contains("pub width: f64"), "got: {result}");
     assert!(result.contains("pub height: f64"), "got: {result}");
