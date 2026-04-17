@@ -2,6 +2,7 @@
 //! filter against a source file and returns the matching code text.
 
 use anyhow::{Context, Result, bail};
+use log::debug;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use streaming_iterator::StreamingIterator;
@@ -105,6 +106,10 @@ pub fn run_treesitter_query(
     }
 
     if results.is_empty() {
+        debug!(
+            "tree-sitter query produced no results\nquery:\n{query_str}\ntree:\n{}",
+            tree.root_node().to_sexp()
+        );
         bail!("tree-sitter query produced no results");
     }
 
